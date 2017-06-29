@@ -6,10 +6,13 @@ const gameHeight = canvas.height - 50;
 const arena = createMatrix(17, 15);
 const colors = ['cyan', 'blue', 'green', 'yellow', 'red', 'purple'];
 let currColor = 0;
-context.fillStyle = '#000';
-context.fillRect(0, 0, gameWidth, gameHeight);
-context.fillStyle = 'grey';
-context.fillRect(0, gameHeight, gameWidth, gameHeight);
+let isMoving = false;
+let currX = 8;
+let currY = 15.25;
+let vx = 0;
+let vy = 0;
+let toClear = [];
+
 context.scale(30, 30);
 
 init();
@@ -22,8 +25,11 @@ function drawBall(color, x, y) {
 }
 
 function resetBall() {
-	currColor = colors.length * Math.random();
+	currColor = parseInt(colors.length * Math.random());
 	drawBall(currColor, 8, 15 + 0.25); //Line the center ball up at the 8th position, since it is the center. And move it 15.25 down so it fits in the gray area.
+	currX = 8;
+	currY = 15.25;
+	toClear = [];
 }
 
 function createBall(x, y) {
@@ -34,7 +40,7 @@ function createBall(x, y) {
 }
 
 function init() {
-	for (let i = 0; i < 9; i++) {
+	for (let i = 0; i < 4; i++) {
 		addLine();
 	}
 	resetBall();
@@ -59,24 +65,92 @@ function addLine() {
 }
 
 function fire(event) {
-	let dx = event.offsetX - 8 * 30 - 15;
-	let dy = event.offsetY - 458 - 15;
-	let angle = Math.tan(-dy / dx);
-	console.log("dx: " + dx + " dy: " + -dy + " angle: " + angle * 180 / Math.PI);
-	//moveBall(angle);
+	let angle = calcAngle(8 * 30 + 15, event.offsetX, -458 - 15, -event.offsetY);
+	if (isMoving === false && canvas.height - event.offsetY > 50) {
+		isMoving = true;
+		moveBall(angle);
+	}
 }
 
-function moveBall(x, y) {
-	update();
 
+
+function moveBall(t) {
+	update();
+	t = wallCollide() * t;
+	vx = Math.cos(t) / 3;
+	vy = Math.sin(t) / 3;
+	if (t >= 0) {
+		currX += vx;
+		currY -= vy;
+	} else {
+		currX -= vx;
+		currY += vy;
+	}
+	drawBall(currColor, currX, currY);
 	setTimeout(function() {
-		requestAnimationFrame(moveBall);
-	}, 500);
+		requestAnimationFrame(function() {
+			if (hit()) {
+				isMoving = false;
+				resetBall();
+			} else {
+				moveBall(t);
+			}
+		});
+	}, 15);
+}
+
+function hit() { //TODO use square hit detection instead, also test out atom git stuff
+	for (let row = 0; row < arena.length; row++) {
+		for (let col = 0; col < arena[row].length; col++) {
+			let dx = currX - col;
+			if (row % 2 !== 0) {
+				dx -= 0.5;
+			}
+			let dy = currY - row;
+			let distance = Math.sqrt(dx * dx + dy * dy);
+			if (arena[row][col] != -1 && distance < 0.5 + 0.5) {
+				snap(currX, currY, col, row);
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+function snap(x, y, hitX, hitY) {
+	let row = Math.floor(y + 0.5);
+	if (hitY % 2 == 0 && row != hitY) {
+		x -= 0.5;
+	}
+	let col = Math.floor(x + 0.5);
+	if (col < 0) col = 0;
+	if (arena[row][col] != -1) {
+		arena[row][col - 1] = currColor;
+	} else {
+		arena[row][col] = currColor;
+	}
+	toClear = checkClear(row, col);
+	if (toClear.length < 3) {
+		toClear.forEach(cord => {
+			arena[cord[0]][cord[1]] = cord[2];
+		});
+	}
+	clearFloating();
+	update();
+}
+
+function wallCollide() {
+	if (currX + 1 >= canvas.width / 30 || currX <= 0 || currY <= 0) {
+		return -1;
+	}
+	return 1;
 }
 
 function update() {
-	context.fillStyle = '#000';
-	context.fillRect(0, 0, 17, 15);
+	context.fillStyle = '#5cb1ee';
+	context.fillRect(0, 0, canvas.width / 30, canvas.height / 30);
+	context.fillStyle = 'grey';
+	context.fillRect(0, 15, canvas.width / 30, canvas.height / 30);
 	arena.forEach((row, y) => {
 		row.forEach((value, x) => {
 			if (value != -1) {
@@ -85,6 +159,120 @@ function update() {
 				} else {
 					drawBall(value, x, y);
 				}
+			}
+		});
+	});
+}
+
+function calcAngle(x1, x2, y1, y2) {
+	let dx = x2 - x1;
+	let dy = y2 - y1;
+	let h = Math.sqrt(dx * dx + dy * dy);
+	let angle = Math.atan((dy / h) / (dx / h));
+	//console.log("dx: " + dx + " dy: " + dy + " angle: " + angle * 180 / Math.PI);
+	return angle;
+}
+
+function spacesToCheck(row, col, odd) {
+	if (row <= 0) {
+		row = 1;
+	}
+	var one, two, three, four, five, six;
+	if (odd == 0) {
+		one = {
+			col: col - 1,
+			row: row - 1
+		};
+		two = {
+			col: col,
+			row: row - 1
+		};
+		three = {
+			col: col - 1,
+			row: row
+		};
+		four = {
+			col: col + 1,
+			row: row
+		};
+		five = {
+			col: col - 1,
+			row: row + 1
+		};
+		six = {
+			col: col,
+			row: row + 1
+		};
+	} else {
+		one = {
+			col: col,
+			row: row - 1
+		};
+		two = {
+			col: col + 1,
+			row: row - 1
+		};
+		three = {
+			col: col - 1,
+			row: row
+		};
+		four = {
+			col: col + 1,
+			row: row
+		};
+		five = {
+			col: col,
+			row: row + 1
+		};
+		six = {
+			col: col + 1,
+			row: row + 1
+		};
+	}
+	let seven = {
+		col: col,
+		row: row
+	};
+
+	return [one, two, three, four, five, six, seven];
+}
+
+function checkClear(row, col) {
+	let spaces = spacesToCheck(row, col, row % 2);
+	spaces.forEach(cell => {
+		if (arena[cell.row][cell.col] == currColor && arena[cell.row][cell.col] !== -1) {
+			toClear.push([cell.row, cell.col, arena[cell.row][cell.col]]);
+			arena[cell.row][cell.col] = -1;
+			checkClear(cell.row, cell.col);
+		}
+	});
+	return toClear;
+}
+
+function checkFloating(row, col) {
+	const base = [];
+	arena[0].forEach(value =>{
+		base.push([0, value]);
+	});
+
+}
+
+function clearFloating() {
+	let counter = 0;
+	let skip = false;
+	arena.forEach((row, y) => {
+		row.forEach((value, x) => {
+			if (value != -1) {
+				let spaces = spacesToCheck(y, x);
+				for (let i = 0; i < 4; i++) {
+					if (arena[spaces[i].row][spaces[i].col] == -1) {
+						counter++;
+					}
+				}
+				if (counter >= 4) {
+					arena[y][x] = -1;
+				}
+				counter = 0;
 			}
 		});
 	});
