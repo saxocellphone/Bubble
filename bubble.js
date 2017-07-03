@@ -129,7 +129,7 @@ function snap(x, y, hitX, hitY) {
 	} else {
 		arena[row][col] = currColor;
 	}
-	toClear = checkClear(row, col);
+	const toClear = checkClear(row, col);
 	if (toClear.length < 3) {
 		toClear.forEach(cord => {
 			arena[cord[0]][cord[1]] = cord[2];
@@ -249,13 +249,11 @@ function checkClear(row, col) {
 	return toClear;
 }
 
-function checkFloating(row, col) {
-	const base = [];
-	arena[0].forEach(value =>{
-		base.push([0, value]);
-	});
-
-}
+// function checkFloating(row, col) {
+// 	arena[0].forEach(cell =>{
+//
+// 	});
+// }
 
 function clearFloating() {
 	let counter = 0;
